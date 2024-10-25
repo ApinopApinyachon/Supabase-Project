@@ -14,6 +14,9 @@ export default async function ProtectedPage() {
     return redirect("/sign-in");
   }
 
+  const { data: notes } = await supabase.from('notes').select()
+
+
   return (
     <div className="flex-1 w-full flex flex-col gap-12">
       <div className="w-full">
@@ -29,6 +32,10 @@ export default async function ProtectedPage() {
           {JSON.stringify(user, null, 2)}
         </pre>
       </div>
+
+      
+      <pre>{JSON.stringify(notes, null, 2)}</pre>
+
       <div>
         <h2 className="font-bold text-2xl mb-4">Next steps</h2>
         <FetchDataSteps />
