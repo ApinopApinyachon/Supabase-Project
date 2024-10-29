@@ -39,6 +39,8 @@ export default function Page() {
   const [newPost, setNewPost] = useState<Post>({ title: '', description: '', image_url: '', created_at: '' })
   const [imageFile, setImageFile] = useState<File | null>(null)
   const supabase = createClient();
+  const [editPost, setEditPost] = useState<Post | null>(null)
+  const [isEditing, setIsEditing] = useState(false);
 
 
   const uploadImage = async (file: File) => {
@@ -87,8 +89,42 @@ export default function Page() {
     }
   }
 
+  const handleEditPost = (post: Post) => {
+    setEditPost(post)
+    setIsEditing(true);
+  }
+
+  const handleUpdatePost = async () => {
+    if (!editPost || !editPost.title) {
+      alert("Title is required!")
+      return
+    }
+
+    let imageUrl = editPost.image_url
+    if (imageFile) {
+      const uploadedUrl = await uploadImage(imageFile)
+      if (uploadedUrl) {
+        imageUrl = uploadedUrl.publicUrl
+      }
+    }
+
+    const { data, error } = await supabase.from('posts').update({
+      title: editPost.title,
+      description: editPost.description,
+      image_url: imageUrl
+    }).eq('id', editPost.id)
+
+    if (error) {
+      console.error('Error updating post:', error)
+    } if (data) {
+      setPosts(posts?.map(post => post.id === editPost.id ? data[0] : post) || null)
+      setEditPost(null)
+      setImageFile(null)
+      setIsEditing(false)
+    }
+  }
+
   const handleDeletePost = async (id: number) => {
-    const supabase = createClient()
     const { data, error } = await supabase
       .from('posts')
       .delete()
@@ -107,7 +143,7 @@ export default function Page() {
       setPosts(data);
     };
     getData();
-  
+
     // Subscribe to real-time updates
     const postsSubscription = supabase
       .channel('custom-all-channel')
@@ -133,7 +169,7 @@ export default function Page() {
         }
       )
       .subscribe();
-      setMounted(true)
+    setMounted(true)
 
     // Cleanup the subscription when the component unmounts
     return () => {
@@ -141,7 +177,7 @@ export default function Page() {
     };
   }, [supabase]);
 
-  
+
   if (!mounted) {
     return (
       <p>Loading...</p>
@@ -203,7 +239,8 @@ export default function Page() {
               )}
               <p className="truncate mt-2 text-center">{post.description}</p>
             </CardContent>
-            <CardFooter className="mt-auto p-2 flex justify-end">
+            <CardFooter className="mt-auto p-2 flex justify-end gap-2">
+              <Button variant='default' onClick={() => handleEditPost(post)}>Edit</Button>
               <Button variant="destructive" onClick={() => handleDeletePost(post.id!)}>
                 Delete
               </Button>
@@ -211,7 +248,38 @@ export default function Page() {
           </Card>
         ))}
       </div>
-
+      <AlertDialog open={isEditing} onOpenChange={setIsEditing}> 
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Post</AlertDialogTitle>
+            <AlertDialogDescription>
+              Please modify the details to update the post.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 p-4">
+            <Input
+              type="text"
+              placeholder="Title"
+              value={editPost?.title || ""}
+              onChange={(e) => setEditPost({ ...editPost!, title: e.target.value })}
+            />
+            <Textarea
+              placeholder="Description"
+              value={editPost?.description || ""}
+              onChange={(e) => setEditPost({ ...editPost!, description: e.target.value })}
+            />
+            <Input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setIsEditing(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUpdatePost}>Update</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 
