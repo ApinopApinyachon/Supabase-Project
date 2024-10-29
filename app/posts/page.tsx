@@ -67,7 +67,7 @@ export default function Page() {
     if (imageFile) {
       const uploadedUrl = await uploadImage(imageFile)
       if (uploadedUrl) {
-        imageUrl = uploadedUrl
+        imageUrl = uploadedUrl.publicUrl
       }
     }
     console.log('image:', imageUrl)
@@ -103,13 +103,45 @@ export default function Page() {
 
   useEffect(() => {
     const getData = async () => {
-      const { data } = await supabase.from('posts').select()
-      setPosts(data)
-    }
-    getData()
-    setMounted(true)
-  }, [])
+      const { data } = await supabase.from('posts').select();
+      setPosts(data);
+    };
+    getData();
+  
+    // Subscribe to real-time updates
+    const postsSubscription = supabase
+      .channel('custom-all-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'posts' },
+        (payload) => {
+          console.log('Change received!', payload);
+          // Handle different types of events
+          if (payload.eventType === 'INSERT') {
+            setPosts((prevPosts: any) => [...prevPosts!, payload.new]);
+          } else if (payload.eventType === 'DELETE') {
+            setPosts((prevPosts) =>
+              prevPosts?.filter((post) => post.id !== payload.old.id) || null
+            );
+          } else if (payload.eventType === 'UPDATE') {
+            setPosts((prevPosts: any) =>
+              prevPosts?.map((post: Post) =>
+                post.id === payload.new.id ? payload.new : post
+              ) || null
+            );
+          }
+        }
+      )
+      .subscribe();
+      setMounted(true)
 
+    // Cleanup the subscription when the component unmounts
+    return () => {
+      supabase.removeChannel(postsSubscription);
+    };
+  }, [supabase]);
+
+  
   if (!mounted) {
     return (
       <p>Loading...</p>
@@ -117,7 +149,7 @@ export default function Page() {
   }
 
   return (
-    <div className='flex flex-col gap-2 justify-start border-2'>
+    <div className='flex flex-col gap-2 justify-start'>
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button className='w-[100px]'>New Post</Button>
@@ -155,18 +187,26 @@ export default function Page() {
       </AlertDialog>
       <div className='grid grid-cols-6 gap-2'>
         {posts?.map((post) => (
-          <Card key={post.id}>
+          <Card key={post.id} className="border-2 flex flex-col h-full">
             <CardHeader>
-              <CardTitle className='truncate'>{post.title}</CardTitle>
+              <CardTitle className="truncate">{post.title}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col items-center justify-center">
               {post.image_url && (
-                <img src={post.image_url} alt={post.title} style={{ maxWidth: '100%', height: 'auto' }} />
+                <div className="w-full flex justify-center">
+                  <img
+                    src={post.image_url}
+                    alt={post.title}
+                    className="max-w-full h-auto object-cover rounded"
+                  />
+                </div>
               )}
-              <p className='truncate'>{post.description}</p>
+              <p className="truncate mt-2 text-center">{post.description}</p>
             </CardContent>
-            <CardFooter>
-              <Button variant="destructive" onClick={() => handleDeletePost(post.id!)}>Delete</Button>
+            <CardFooter className="mt-auto p-2 flex justify-end">
+              <Button variant="destructive" onClick={() => handleDeletePost(post.id!)}>
+                Delete
+              </Button>
             </CardFooter>
           </Card>
         ))}
